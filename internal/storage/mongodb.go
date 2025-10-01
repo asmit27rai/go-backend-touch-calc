@@ -73,7 +73,7 @@ func (m *MongoStorage) PutItem(path string, data string, bucket ...string) error
 func (m *MongoStorage) GetItem(path string, bucket ...string) (string, error) {
     collection := m.getCollection()
     ctx := context.Background()
-
+    
     var item MongoItem
     err := collection.FindOne(ctx, bson.M{"_id": path}).Decode(&item)
     if err != nil {
@@ -82,11 +82,11 @@ func (m *MongoStorage) GetItem(path string, bucket ...string) (string, error) {
         }
         return "", err
     }
-
+    
     if dataStr, ok := item.Data.(string); ok {
         return dataStr, nil
     }
-
+    
     dataBytes, err := json.Marshal(item.Data)
     if err != nil {
         return "", err

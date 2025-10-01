@@ -28,12 +28,15 @@ func (s *Service) getUserPath(email string) []string {
 }
 
 func (s *Service) UserExists(email string) (bool, error) {
-	path := s.getUserPath(email)
-	item, err := s.storage.GetFile(path)
-	if err != nil {
-		return false, err
-	}
-	return item != nil, nil
+    path := s.getUserPath(email)
+    item, err := s.storage.GetFile(path)
+    if err != nil {
+        if err == storage.ErrNotFound {
+            return false, nil
+        }
+        return false, err
+    }
+    return item != nil, nil
 }
 
 func (s *Service) GetUser(email string) (*models.User, error) {
@@ -61,37 +64,41 @@ func (s *Service) GetUser(email string) (*models.User, error) {
 }
 
 func (s *Service) CreateUser(email, password string) error {
-	exists, err := s.UserExists(email)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return fmt.Errorf("user already exists")
-	}
+    // First check if user already exists
+    exists, err := s.UserExists(email)
+    if err != nil {
+        return fmt.Errorf("error checking user existence: %w", err)
+    }
+    if exists {
+        return fmt.Errorf("user already exists")
+    }
 
-	user, err := models.NewUser(email, password)
-	if err != nil {
-		return err
-	}
+    user, err := models.NewUser(email, password)
+    if err != nil {
+        return fmt.Errorf("error creating user model: %w", err)
+    }
 
-	path := s.getUserPath(email)
-	userData, err := user.ToJSON()
-	if err != nil {
-		return err
-	}
+    // Ensure the root home directory exists
+    homeDir := []string{"home"}
+    err = s.storage.CreateDir(homeDir)
+    if err != nil {
+        return fmt.Errorf("error creating home directory: %w", err)
+    }
 
-	// Ensure parent directory exists
-	parentPath := []string{"home", UserDir}
-	_, err = s.storage.GetFile(parentPath)
-	if err != nil {
-		// Create parent directory if it doesn't exist
-		err = s.storage.CreateDir(parentPath)
-		if err != nil {
-			return err
-		}
-	}
+    // Ensure parent directory exists
+    parentPath := []string{"home", UserDir}
+    err = s.storage.CreateDir(parentPath)
+    if err != nil {
+        return fmt.Errorf("error creating users directory: %w", err)
+    }
 
-	return s.storage.CreateFile(path, userData)
+    path := s.getUserPath(email)
+    userData, err := user.ToJSON()
+    if err != nil {
+        return fmt.Errorf("error serializing user data: %w", err)
+    }
+
+    return s.storage.CreateFile(path, userData)
 }
 
 func (s *Service) AuthenticateUser(email, password string) (bool, error) {
