@@ -1,0 +1,233 @@
+{{define "importcollab.html"}}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Import Spreadsheet - TouchCalc</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 0; 
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 700px; 
+            margin: 50px auto; 
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .header {
+            background: linear-gradient(135deg, #007cba 0%, #005a8b 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h2 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        .content {
+            padding: 40px;
+        }
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 15px;
+            padding: 50px 30px;
+            text-align: center;
+            margin: 30px 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #007cba;
+            background: #f8f9ff;
+        }
+        .upload-area.dragover {
+            border-color: #007cba;
+            background: #e3f2fd;
+        }
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #ccc;
+        }
+        input[type="file"] { 
+            margin: 20px 0;
+            padding: 12px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] { 
+            padding: 15px 40px; 
+            background: linear-gradient(135deg, #007cba 0%, #005a8b 100%); 
+            color: white; 
+            border: none; 
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 18px;
+            width: 100%;
+            margin-top: 20px;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        input[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,124,186,0.4);
+        }
+        .supported-formats {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 30px 0;
+            border-left: 4px solid #007cba;
+        }
+        .supported-formats h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 16px;
+        }
+        .format-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .format-list li {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .format-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .back-link a {
+            color: #007cba;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 10px 20px;
+            border: 2px solid #007cba;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+        .back-link a:hover {
+            background: #007cba;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>📤 Import Spreadsheet</h2>
+            <p>Upload your existing spreadsheet files to TouchCalc</p>
+        </div>
+        
+        <div class="content">
+            <form method="POST" enctype="multipart/form-data" action="/import" id="uploadForm">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <p><strong>Drop your file here or click to browse</strong></p>
+                    <p>Maximum file size: 10MB</p>
+                    <input type="file" name="upload" id="fileInput" accept=".msc,.msce,.xlsx,.csv,.xls" required>
+                </div>
+                
+                <div class="supported-formats">
+                    <h4>📋 Supported Formats</h4>
+                    <ul class="format-list">
+                        <li><span class="format-icon">📊</span> .msc, .msce (SocialCalc format)</li>
+                        <li><span class="format-icon">📈</span> .xlsx, .xls (Excel format)</li>
+                        <li><span class="format-icon">📄</span> .csv (Comma-separated values)</li>
+                    </ul>
+                </div>
+                
+                <input type="submit" value="🚀 Upload and Import" id="submitBtn">
+            </form>
+            
+            <div class="back-link">
+                <a href="/save">← Back to File List</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const form = document.getElementById('uploadForm');
+
+        // Click to upload
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop functionality
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                updateFileDisplay();
+            }
+        });
+
+        // File input change
+        fileInput.addEventListener('change', updateFileDisplay);
+
+        function updateFileDisplay() {
+            const file = fileInput.files[0];
+            if (file) {
+                const uploadIcon = uploadArea.querySelector('.upload-icon');
+                const uploadText = uploadArea.querySelector('p');
+                
+                uploadIcon.textContent = '✅';
+                uploadText.innerHTML = `<strong>File selected: ${file.name}</strong><br>Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+                
+                submitBtn.textContent = `🚀 Import ${file.name}`;
+            }
+        }
+
+        // Form submission
+        form.addEventListener('submit', (e) => {
+            submitBtn.textContent = '⏳ Uploading...';
+            submitBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
+{{end}}

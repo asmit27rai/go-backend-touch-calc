@@ -1,0 +1,198 @@
+{{define "allusersheets.html"}}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TouchCalc - Your Files</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 0; 
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header { 
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .header h2 { 
+            margin: 0; 
+            color: #333; 
+            font-size: 28px;
+        }
+        .user-info { 
+            color: #666; 
+            font-size: 16px;
+        }
+        .actions { 
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .actions a { 
+            margin-right: 20px; 
+            text-decoration: none; 
+            color: #007cba; 
+            font-weight: 500;
+            padding: 8px 16px;
+            border: 2px solid #007cba;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        .actions a:hover {
+            background: #007cba;
+            color: white;
+        }
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+        }
+        th, td { 
+            padding: 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #eee;
+        }
+        th { 
+            background-color: #f8f9fa; 
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .btn { 
+            padding: 6px 12px; 
+            margin: 2px; 
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        .btn-edit { background: #28a745; color: white; }
+        .btn-view { background: #17a2b8; color: white; }
+        .btn-delete { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.8; transform: translateY(-1px); }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>📊 Your Spreadsheets</h2>
+            <div class="user-info">Welcome, <strong>{{.user}}</strong>!</div>
+        </div>
+        
+        <div class="actions">
+            <a href="/import">📤 Import New File</a>
+            <a href="/logout">🚪 Logout</a>
+            <a href="/browser">🏠 Dashboard</a>
+        </div>
+        
+        <div class="table-container">
+            {{if .entries}}
+            <table>
+                <thead>
+                    <tr>
+                        <th>📄 Filename</th>
+                        <th>⚡ Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .entries}}
+                    <tr>
+                        <td><strong>{{.fname}}</strong></td>
+                        <td>
+                            <button class="btn btn-edit" onclick="doedit('{{.fname}}');">✏️ Edit</button>
+                            <button class="btn btn-view" onclick="doview('{{.fname}}');">👁️ View</button>
+                            <button class="btn btn-delete" onclick="doremove('{{.fname}}');">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <div class="empty-state">
+                <h3>No files found</h3>
+                <p>Get started by importing a spreadsheet or creating a new one.</p>
+                <a href="/import" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #007cba; color: white; text-decoration: none; border-radius: 5px;">Import Your First File</a>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <script>
+    function doedit(fname) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/usersheet';
+        
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'pagename';
+        input.value = fname;
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function doview(fname) {
+        doedit(fname); // For now, view and edit are the same
+    }
+
+    function doremove(fname) {
+        if (confirm('Are you sure you want to delete "' + fname + '"?\n\nThis action cannot be undone.')) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/usersheet';
+            
+            var input1 = document.createElement('input');
+            input1.type = 'hidden';
+            input1.name = 'pagename';
+            input1.value = fname;
+            
+            var input2 = document.createElement('input');
+            input2.type = 'hidden';
+            input2.name = 'delete';
+            input2.value = 'yes';
+            
+            form.appendChild(input1);
+            form.appendChild(input2);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+    </script>
+</body>
+</html>
+{{end}}
