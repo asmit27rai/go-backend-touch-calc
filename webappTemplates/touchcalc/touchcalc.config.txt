@@ -1,4 +1,4 @@
 {
-  "code": "123",
+  "code": "",
   "footers": ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5"]
 }

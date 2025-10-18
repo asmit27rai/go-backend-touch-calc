@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.APP_TITLE | default "TouchCalc"}}</title>
+    <title>{{if .APP_TITLE}}{{.APP_TITLE}}{{else}}TouchCalc{{end}}</title>
     <link rel="stylesheet" href="/static/css/socialcalc.css">
     <link rel="stylesheet" href="/static/css/screen.css">
     <script src="/static/js/jquery.min.js"></script>
