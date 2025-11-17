@@ -3,7 +3,10 @@ package handlers
 import (
     "encoding/json"
     "fmt"
+    mt "math/rand"
     "net/http"
+    "strings"
+    "time"
 
     "github.com/gin-gonic/gin"
 )
@@ -819,4 +822,439 @@ func (h *WebAppHandler) handleSocialCalcLoad(c *gin.Context, user string, req We
         "result": "ok",
         "storage_backend": h.handler.Config.StorageBackend,
     })
+}
+
+func (h *WebAppHandler) HandleSave(c *gin.Context) {
+	if c.Request.Method == "GET" {
+		h.handleSaveGet(c)
+	} else {
+		h.handleSavePost(c)
+	}
+}
+
+func (h *WebAppHandler) handleSaveGet(c *gin.Context) {
+	user := h.getCurrentUser(c)
+	if user == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	fmt.Printf("DEBUG: Loading file list for user: %s\n", user)
+
+	// Get user's files from storage
+	path := []string{"home", user}
+	item, err := h.handler.Storage.GetFile(path)
+	var entries []map[string]interface{}
+	
+	if err != nil || item == nil {
+		fmt.Printf("DEBUG: User directory not found, creating structure\n")
+		// Create user directory if it doesn't exist
+		err = h.handler.Storage.CreateDir(path)
+		if err != nil {
+			fmt.Printf("DEBUG: Failed to create user directory: %v\n", err)
+		}
+		
+		// Create default file
+		defaultPath := []string{"home", user, "default"}
+		defaultData := map[string]interface{}{
+			"user":  user,
+			"fname": "default",
+			"data":  "A1:Welcome to TouchCalc\nB1:Hello " + user + "\nA2:Start editing here\nB2:Your data auto-saves\n\n",
+		}
+		dataJSON, _ := json.Marshal(defaultData)
+		h.handler.Storage.CreateFile(defaultPath, string(dataJSON))
+		
+		entries = []map[string]interface{}{
+			{"fname": "default"},
+		}
+	} else {
+		// Extract file names from directory
+		if data, ok := item.Data.([]interface{}); ok {
+			for _, file := range data {
+				if str, ok := file.(string); ok {
+					entries = append(entries, map[string]interface{}{
+						"fname": str,
+					})
+				}
+			}
+		}
+	}
+
+	fmt.Printf("DEBUG: Found %d files for user %s\n", len(entries), user)
+
+	c.HTML(http.StatusOK, "allusersheets.html", gin.H{
+		"entries": entries,
+		"user":    user,
+	})
+}
+
+func (h *WebAppHandler) handleSavePost(c *gin.Context) {
+	user := h.getCurrentUser(c)
+	if user == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"result": "fail",
+			"data":   "usererror",
+		})
+		return
+	}
+
+	fname := c.PostForm("fname")
+	data := c.PostForm("data")
+	
+	fmt.Printf("DEBUG: Saving file %s for user %s\n", fname, user)
+	
+	if fname == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"result": "fail",
+			"data":   "missing filename",
+		})
+		return
+	}
+
+	path := []string{"home", user, fname}
+	
+	// Create file data with metadata
+	fileData := map[string]interface{}{
+		"user":     user,
+		"fname":    fname,
+		"data":     data,
+		"timestamp": time.Now().Unix(),
+	}
+	dataJSON, _ := json.Marshal(fileData)
+	
+	// Check if file exists
+	_, err := h.handler.Storage.GetFile(path)
+	if err != nil {
+		// Create new file
+		err = h.handler.Storage.CreateFile(path, string(dataJSON))
+	} else {
+		// Update existing file
+		err = h.handler.Storage.UpdateFile(path, string(dataJSON))
+	}
+
+	if err != nil {
+		fmt.Printf("DEBUG: Error saving file: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"result": "fail",
+			"data":   "failed to save file",
+		})
+		return
+	}
+
+	fmt.Printf("DEBUG: File %s saved successfully\n", fname)
+	c.JSON(http.StatusOK, gin.H{
+		"result": "ok",
+		"data":   "Done",
+	})
+}
+
+// HandleUserSheet handles the /usersheet endpoint
+func (h *WebAppHandler) HandleUserSheet(c *gin.Context) {
+	user := h.getCurrentUser(c)
+	if user == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	fname := c.PostForm("pagename")
+	deleteFlag := c.PostForm("delete")
+	
+	fmt.Printf("DEBUG: UserSheet request - user: %s, file: %s, delete: %s\n", user, fname, deleteFlag)
+	
+	if fname == "" {
+		c.Redirect(http.StatusFound, "/save")
+		return
+	}
+
+	path := []string{"home", user, fname}
+
+	// Handle delete operation
+	if deleteFlag == "yes" {
+		fmt.Printf("DEBUG: Deleting file %s for user %s\n", fname, user)
+		err := h.handler.Storage.DeleteFile(path)
+		if err != nil {
+			fmt.Printf("DEBUG: Failed to delete file: %v\n", err)
+		}
+		c.Redirect(http.StatusFound, "/save")
+		return
+	}
+
+	// Get file for editing
+	item, err := h.handler.Storage.GetFile(path)
+	if err != nil {
+		fmt.Printf("DEBUG: File %s not found for user %s\n", fname, user)
+		c.Redirect(http.StatusFound, "/save")
+		return
+	}
+
+	// Generate session ID
+	sessionID := h.generateRandomString(6)
+	
+	// Extract content if it's in JSON format
+	var content string
+	if dataStr, ok := item.Data.(string); ok {
+		var fileData map[string]interface{}
+		if err := json.Unmarshal([]byte(dataStr), &fileData); err == nil {
+			if contentField, exists := fileData["data"]; exists {
+				if contentStr, ok := contentField.(string); ok {
+					content = contentStr
+				} else {
+					content = dataStr
+				}
+			} else if contentField, exists := fileData["content"]; exists {
+				if contentStr, ok := contentField.(string); ok {
+					content = contentStr
+				} else {
+					content = dataStr
+				}
+			} else {
+				content = dataStr
+			}
+		} else {
+			content = dataStr
+		}
+	} else {
+		contentBytes, _ := json.Marshal(item.Data)
+		content = string(contentBytes)
+	}
+	
+	entry := map[string]interface{}{
+		"fname":        fname,
+		"sheetstr":     content,
+		"sheetmscestr": "",
+		"session":      sessionID,
+	}
+
+	fmt.Printf("DEBUG: Opening file %s for editing\n", fname)
+	c.HTML(http.StatusOK, "importcollabload.html", gin.H{
+		"entry": entry,
+		"user":  user,
+	})
+}
+
+// HandleImportGet handles GET requests to /import
+func (h *WebAppHandler) HandleImportGet(c *gin.Context) {
+	session := h.generateRandomString(6)
+	
+	c.SetCookie("session", session, 3600, "/", "", false, true)
+	c.SetCookie("idinsession", "1", 3600, "/", "", false, true)
+	
+	fmt.Printf("DEBUG: Import page loaded with session: %s\n", session)
+	
+	c.HTML(http.StatusOK, "importcollab.html", gin.H{
+		"entry": map[string]interface{}{
+			"fname":        "test",
+			"sheetstr":     "",
+			"sheetmscestr": "",
+			"session":      session,
+		},
+	})
+}
+
+// HandleImportPost handles POST requests to /import
+func (h *WebAppHandler) HandleImportPost(c *gin.Context) {
+	session, _ := c.Cookie("session")
+	user := h.getCurrentUser(c)
+	
+	fmt.Printf("DEBUG: Import POST request - session: %s, user: %s\n", session, user)
+	
+	file, err := c.FormFile("upload")
+	if err != nil {
+		fmt.Printf("DEBUG: No file uploaded: %v\n", err)
+		c.HTML(http.StatusBadRequest, "importerror.html", gin.H{
+			"error": "No file uploaded",
+		})
+		return
+	}
+
+	fname := file.Filename
+	fmt.Printf("DEBUG: Processing uploaded file: %s\n", fname)
+	
+	// Open and read file
+	src, err := file.Open()
+	if err != nil {
+		fmt.Printf("DEBUG: Failed to read file: %v\n", err)
+		c.HTML(http.StatusInternalServerError, "importerror.html", gin.H{
+			"error": "Failed to read file",
+		})
+		return
+	}
+	defer src.Close()
+
+	// Read file contents
+	content := make([]byte, file.Size)
+	src.Read(content)
+	
+	var wbook string
+	
+	// Handle different file types
+	if strings.HasSuffix(strings.ToLower(fname), ".msc") || strings.HasSuffix(strings.ToLower(fname), ".msce") {
+		wbook = string(content)
+	} else {
+		// For other file types, treat as plain text for now
+		// In a real implementation, you'd convert Excel/CSV files here
+		wbook = string(content)
+	}
+
+	// If user is logged in, save the imported file
+	if user != "" {
+		// Remove file extension for storage
+		baseName := fname
+		if idx := strings.LastIndex(fname, "."); idx != -1 {
+			baseName = fname[:idx]
+		}
+		
+		path := []string{"home", user, baseName}
+		fileData := map[string]interface{}{
+			"user":      user,
+			"fname":     baseName,
+			"data":      wbook,
+			"imported":  true,
+			"timestamp": time.Now().Unix(),
+		}
+		dataJSON, _ := json.Marshal(fileData)
+		h.handler.Storage.CreateFile(path, string(dataJSON))
+		
+		fmt.Printf("DEBUG: Imported file saved as %s for user %s\n", baseName, user)
+	}
+
+	c.HTML(http.StatusOK, "importcollabload.html", gin.H{
+		"entry": map[string]interface{}{
+			"fname":        fname,
+			"sheetmscestr": wbook,
+			"sheetstr":     wbook,
+			"session":      session,
+		},
+		"user": user,
+	})
+}
+
+// HandleDownloadFile handles file download requests
+func (h *WebAppHandler) HandleDownloadFile(c *gin.Context) {
+	user := h.getCurrentUser(c)
+	if user == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"result": "fail",
+			"data":   "usererror",
+		})
+		return
+	}
+
+	fname := c.PostForm("fname")
+	format := c.PostForm("format")
+	
+	fmt.Printf("DEBUG: Download request - user: %s, file: %s, format: %s\n", user, fname, format)
+	
+	if fname == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"result": "fail",
+			"data":   "missing filename",
+		})
+		return
+	}
+
+	path := []string{"home", user, fname}
+	item, err := h.handler.Storage.GetFile(path)
+	if err != nil {
+		fmt.Printf("DEBUG: File not found for download: %s\n", fname)
+		c.JSON(http.StatusNotFound, gin.H{
+			"result": "fail",
+			"data":   "file not found",
+		})
+		return
+	}
+
+	// Extract content
+	var content string
+	if dataStr, ok := item.Data.(string); ok {
+		var fileData map[string]interface{}
+		if err := json.Unmarshal([]byte(dataStr), &fileData); err == nil {
+			if dataField, exists := fileData["data"]; exists {
+				if dataFieldStr, ok := dataField.(string); ok {
+					content = dataFieldStr
+				} else {
+					content = dataStr
+				}
+			} else {
+				content = dataStr
+			}
+		} else {
+			content = dataStr
+		}
+	} else {
+		dataBytes, _ := json.Marshal(item.Data)
+		content = string(dataBytes)
+	}
+
+	// Set appropriate headers based on format
+	switch format {
+	case "csv":
+		c.Header("Content-Type", "text/csv")
+		c.Header("Content-Disposition", "attachment; filename="+fname+".csv")
+	case "xlsx":
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		c.Header("Content-Disposition", "attachment; filename="+fname+".xlsx")
+	case "msc":
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Disposition", "attachment; filename="+fname+".msc")
+	default:
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Disposition", "attachment; filename="+fname)
+	}
+
+	c.String(http.StatusOK, content)
+}
+
+// HandleHTMLToPDFGet handles GET requests to /htmltopdf
+func (h *WebAppHandler) HandleHTMLToPDFGet(c *gin.Context) {
+	user := h.getCurrentUser(c)
+	c.HTML(http.StatusOK, "htmltopdf.html", gin.H{
+		"user": user,
+	})
+}
+
+// HandleHTMLToPDFPost handles POST requests to /htmltopdf
+func (h *WebAppHandler) HandleHTMLToPDFPost(c *gin.Context) {
+	user := h.getCurrentUser(c)
+	if user == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"result": "fail",
+			"data":   "usererror",
+		})
+		return
+	}
+
+	htmlContent := c.PostForm("html")
+	filename := c.PostForm("filename")
+	
+	fmt.Printf("DEBUG: PDF conversion request - user: %s, filename: %s\n", user, filename)
+	
+	if htmlContent == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"result": "fail",
+			"data":   "missing HTML content",
+		})
+		return
+	}
+
+	if filename == "" {
+		filename = "document"
+	}
+
+	// Placeholder for PDF generation - implement with wkhtmltopdf or similar
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", "attachment; filename="+filename+".pdf")
+	c.String(http.StatusOK, "PDF conversion feature coming soon. HTML content length: %d", len(htmlContent))
+}
+
+// Helper method to generate random session IDs (add to existing methods)
+func (h *WebAppHandler) generateRandomString(length int) string {
+    const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    b := make([]byte, length)
+    // Seed math/rand once (not cryptographically secure)
+    mt.Seed(time.Now().UnixNano())
+    for i := range b {
+        b[i] = charset[mt.Intn(len(charset))]
+    }
+    return string(b)
 }

@@ -1,0 +1,192 @@
+{{define "htmltopdf.html"}}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTML to PDF Converter - TouchCalc</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 0; 
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .header {
+            background: linear-gradient(135deg, #007cba 0%, #005a8b 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h2 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            font-weight: 300;
+        }
+        .content {
+            padding: 40px;
+        }
+        .form-group {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 15px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #007cba;
+            box-shadow: 0 0 0 3px rgba(0,124,186,0.1);
+        }
+        .btn {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #007cba 0%, #005a8b 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,124,186,0.4);
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .back-link a {
+            color: #007cba;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .note {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #007cba;
+        }
+        .note h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .note p {
+            margin: 0;
+            color: #666;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>🖨️ HTML to PDF Converter</h2>
+            <p>Convert HTML content to PDF documents</p>
+        </div>
+        
+        <div class="content">
+            <form method="POST" action="/htmltopdf">
+                <div class="form-group">
+                    <label for="filename">📄 Filename (without extension):</label>
+                    <input type="text" id="filename" name="filename" placeholder="document" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="html">📝 HTML Content:</label>
+                    <textarea id="html" name="html" placeholder="Enter your HTML content here..." required></textarea>
+                </div>
+                
+                <div class="note">
+                    <h4>📋 Usage Tips</h4>
+                    <p>Enter valid HTML content above. You can include CSS styles, tables, and formatted text. The converter will generate a PDF file with your content.</p>
+                </div>
+                
+                <button type="submit" class="btn">🔄 Convert to PDF</button>
+            </form>
+            
+            <div class="back-link">
+                <a href="/save">← Back to File List</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample HTML template
+        const sampleHTML = `<!DOCTYPE html>
+<html>
+<head>
+    <title>Sample Document</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #333; border-bottom: 2px solid #007cba; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Sample Report</h1>
+    <p>This is a sample HTML document that will be converted to PDF.</p>
+    
+    <table>
+        <tr><th>Item</th><th>Quantity</th><th>Price</th></tr>
+        <tr><td>Product A</td><td>10</td><td>$100</td></tr>
+        <tr><td>Product B</td><td>5</td><td>$50</td></tr>
+    </table>
+    
+    <p><strong>Total: $150</strong></p>
+</body>
+</html>`;
+
+        // Add sample button
+        const textarea = document.getElementById('html');
+        const loadSampleBtn = document.createElement('button');
+        loadSampleBtn.type = 'button';
+        loadSampleBtn.textContent = '📄 Load Sample HTML';
+        loadSampleBtn.style.cssText = 'margin-bottom: 10px; padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;';
+        loadSampleBtn.onclick = function() {
+            textarea.value = sampleHTML;
+            document.getElementById('filename').value = 'sample-report';
+        };
+        
+        textarea.parentNode.insertBefore(loadSampleBtn, textarea);
+    </script>
+</body>
+</html>
+{{end}}

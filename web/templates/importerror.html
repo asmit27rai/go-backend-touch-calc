@@ -1,0 +1,101 @@
+{{define "importerror.html"}}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Import Error - TouchCalc</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 0; 
+            margin: 0;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        .error-icon {
+            font-size: 64px;
+            color: #ff6b6b;
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+            font-weight: 300;
+        }
+        .error-message { 
+            color: #666; 
+            font-size: 18px; 
+            margin: 20px 0 30px 0;
+            line-height: 1.5;
+        }
+        .btn-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn { 
+            padding: 12px 24px; 
+            text-decoration: none; 
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn-primary {
+            background: #007cba; 
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .help-text {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">⚠️</div>
+        <h2>Import Error</h2>
+        <div class="error-message">{{.error}}</div>
+        
+        <div class="btn-container">
+            <a href="/import" class="btn btn-primary">🔄 Try Again</a>
+            <a href="/save" class="btn btn-secondary">📋 Back to Files</a>
+        </div>
+        
+        <div class="help-text">
+            <p><strong>Supported file formats:</strong></p>
+            <p>.msc, .msce (SocialCalc) • .xlsx, .xls (Excel) • .csv (Comma-separated)</p>
+            <p>Maximum file size: 10MB</p>
+        </div>
+    </div>
+</body>
+</html>
+{{end}}

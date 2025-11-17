@@ -167,8 +167,9 @@ func (h *AuthHandler) handleRegister(c *gin.Context, email, password string) {
         fmt.Printf("DEBUG: Email validation failed for: %s\n", email)
         if c.GetHeader("Content-Type") == "application/json" {
             c.JSON(http.StatusBadRequest, gin.H{
-                "data":   "usererror",
+                "data": "usererror",
                 "result": "fail",
+                "message": "Invalid email format",
             })
         } else {
             c.HTML(http.StatusBadRequest, "register.html", gin.H{
@@ -185,13 +186,14 @@ func (h *AuthHandler) handleRegister(c *gin.Context, email, password string) {
         fmt.Printf("DEBUG: Error checking if user exists: %v\n", err)
         if c.GetHeader("Content-Type") == "application/json" {
             c.JSON(http.StatusInternalServerError, gin.H{
-                "data":   "error",
+                "data": "error",
                 "result": "fail",
+                "message": "Database error: " + err.Error(),
             })
         } else {
             c.HTML(http.StatusInternalServerError, "register.html", gin.H{
                 "user": nil,
-                "error": "Server error occurred: " + err.Error(),
+                "error": "Database error occurred: " + err.Error(),
             })
         }
         return
@@ -201,8 +203,9 @@ func (h *AuthHandler) handleRegister(c *gin.Context, email, password string) {
         fmt.Printf("DEBUG: User already exists: %s\n", email)
         if c.GetHeader("Content-Type") == "application/json" {
             c.JSON(http.StatusConflict, gin.H{
-                "data":   "userexists",
+                "data": "userexists",
                 "result": "fail",
+                "message": "User already exists",
             })
         } else {
             c.HTML(http.StatusConflict, "register.html", gin.H{
@@ -219,8 +222,9 @@ func (h *AuthHandler) handleRegister(c *gin.Context, email, password string) {
         fmt.Printf("DEBUG: Error creating user: %v\n", err)
         if c.GetHeader("Content-Type") == "application/json" {
             c.JSON(http.StatusInternalServerError, gin.H{
-                "data":   "error",
+                "data": "error",
                 "result": "fail",
+                "message": "Failed to create user: " + err.Error(),
             })
         } else {
             c.HTML(http.StatusInternalServerError, "register.html", gin.H{
@@ -231,7 +235,7 @@ func (h *AuthHandler) handleRegister(c *gin.Context, email, password string) {
         return
     }
 
-    fmt.Printf("DEBUG: Creating user home directory\n")
+    fmt.Printf("DEBUG: Creating user directories\n")
     // Create user home directory and required directories
     userHomePath := []string{"home", email}
     err = h.handler.Storage.CreateDir(userHomePath)
@@ -248,15 +252,17 @@ func (h *AuthHandler) handleRegister(c *gin.Context, email, password string) {
 
     fmt.Printf("DEBUG: Setting current user and completing registration\n")
     h.setCurrentUser(c, email)
+    
     if c.GetHeader("Content-Type") == "application/json" {
         c.JSON(http.StatusOK, gin.H{
-            "data":   "success",
+            "data": "success",
             "result": "ok",
+            "message": "Registration successful",
         })
     } else {
-        // Redirect to landing page instead of /browser
         c.Redirect(http.StatusFound, "/browser")
     }
+    
     fmt.Printf("DEBUG: Registration completed successfully for: %s\n", email)
 }
 

@@ -2,13 +2,17 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/c4gt/tornado-nginx-go-backend/internal/models"
 )
 
@@ -18,48 +22,52 @@ type S3Storage struct {
 }
 
 func NewS3Storage(bucketName, endpoint, accessKey, secretKey, region string, useSSL bool) (*S3Storage, error) {
-	var cfg aws.Config
-	var err error
+    var cfg aws.Config
+    var err error
 
-	if endpoint != "" {
-		// MinIO configuration
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			if service == s3.ServiceID {
-				return aws.Endpoint{
-					URL:           fmt.Sprintf("%s://%s", map[bool]string{true: "https", false: "http"}[useSSL], endpoint),
-					SigningRegion: region,
-				}, nil
-			}
-			return aws.Endpoint{}, fmt.Errorf("unknown endpoint requested")
-		})
+    if endpoint != "" {
+        customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+            if service == s3.ServiceID {
+                return aws.Endpoint{
+                    URL:           fmt.Sprintf("%s://%s", map[bool]string{true: "https", false: "http"}[useSSL], endpoint),
+                    SigningRegion: region,
+                }, nil
+            }
+            return aws.Endpoint{}, fmt.Errorf("unknown endpoint requested")
+        })
 
-		cfg, err = config.LoadDefaultConfig(context.TODO(),
-			config.WithEndpointResolverWithOptions(customResolver),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
-			config.WithRegion(region),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load MinIO config: %w", err)
-		}
-	} else {
-		// AWS S3 configuration
-		cfg, err = config.LoadDefaultConfig(context.TODO())
-		if err != nil {
-			return nil, fmt.Errorf("failed to load AWS config: %w", err)
-		}
-	}
+        cfg, err = config.LoadDefaultConfig(context.TODO(),
+            config.WithEndpointResolverWithOptions(customResolver),
+            config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
+            config.WithRegion(region),
+        )
+        if err != nil {
+            return nil, fmt.Errorf("failed to load MinIO config: %w", err)
+        }
+    } else {
+        cfg, err = config.LoadDefaultConfig(context.TODO())
+        if err != nil {
+            return nil, fmt.Errorf("failed to load AWS config: %w", err)
+        }
+    }
 
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		if endpoint != "" {
-			// Force path-style addressing for MinIO
-			o.UsePathStyle = true
-		}
-	})
+    client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+        if endpoint != "" {
+            o.UsePathStyle = true
+        }
+    })
 
-	return &S3Storage{
-		client:     client,
-		bucketName: bucketName,
-	}, nil
+    storage := &S3Storage{
+        client:     client,
+        bucketName: bucketName,
+    }
+
+    err = storage.ensureBucketExists(context.TODO())
+    if err != nil {
+        return nil, fmt.Errorf("failed to ensure bucket exists: %w", err)
+    }
+
+    return storage, nil
 }
 
 func (s *S3Storage) pathToString(path []string) string {
@@ -82,34 +90,37 @@ func (s *S3Storage) PutItem(path string, data string, bucket ...string) error {
 }
 
 func (s *S3Storage) GetItem(path string, bucket ...string) (string, error) {
-	bucketName := s.bucketName
-	if len(bucket) > 0 && bucket[0] != "" {
-		bucketName = bucket[0]
-	}
+    bucketName := s.bucketName
+    if len(bucket) > 0 && bucket[0] != "" {
+        bucketName = bucket[0]
+    }
 
-	result, err := s.client.GetObject(context.TODO(), &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(path),
-	})
-	if err != nil {
-		return "", err
-	}
-	defer result.Body.Close()
+    result, err := s.client.GetObject(context.TODO(), &s3.GetObjectInput{
+        Bucket: aws.String(bucketName),
+        Key:    aws.String(path),
+    })
+    if err != nil {
+        var noSuchKey *types.NoSuchKey
+        var noSuchBucket *types.NoSuchBucket
+        
+        if errors.As(err, &noSuchKey) || strings.Contains(err.Error(), "NoSuchKey") {
+            return "", ErrNotFound
+        }
+        
+        if errors.As(err, &noSuchBucket) || strings.Contains(err.Error(), "NoSuchBucket") {
+            return "", ErrNotFound
+        }
+        
+        return "", err
+    }
+    defer result.Body.Close()
 
-	// Read the content
-	var content strings.Builder
-	buffer := make([]byte, 1024)
-	for {
-		n, err := result.Body.Read(buffer)
-		if n > 0 {
-			content.Write(buffer[:n])
-		}
-		if err != nil {
-			break
-		}
-	}
+    content, err := io.ReadAll(result.Body)
+    if err != nil {
+        return "", err
+    }
 
-	return content.String(), nil
+    return string(content), nil
 }
 
 func (s *S3Storage) ExistsItem(path string, bucket ...string) (bool, error) {
@@ -124,7 +135,6 @@ func (s *S3Storage) ExistsItem(path string, bucket ...string) (bool, error) {
 	})
 
 	if err != nil {
-		// Check if the error is "not found"
 		if strings.Contains(err.Error(), "NotFound") {
 			return false, nil
 		}
@@ -151,7 +161,6 @@ func (s *S3Storage) DeleteItem(path string, bucket ...string) error {
 func (s *S3Storage) CreateDir(path []string) error {
 	spath := s.pathToString(path)
 
-	// Check if directory already exists
 	exists, err := s.ExistsItem(spath)
 	if err != nil {
 		return err
@@ -266,6 +275,49 @@ func (s *S3Storage) UpdateFile(path []string, data string) error {
 
 	spath := s.pathToString(path)
 	return s.PutItem(spath, dataJSON)
+}
+
+func (s *S3Storage) ensureBucketExists(ctx context.Context) error {
+    _, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
+        Bucket: aws.String(s.bucketName),
+    })
+
+    if err != nil {
+        var notFound *types.NotFound
+        var noSuchBucket *types.NoSuchBucket
+        
+        if errors.As(err, &notFound) || errors.As(err, &noSuchBucket) || 
+           strings.Contains(err.Error(), "NotFound") || 
+           strings.Contains(err.Error(), "NoSuchBucket") {
+            
+            fmt.Printf("Bucket %s doesn't exist, creating...\n", s.bucketName)
+            
+            _, err = s.client.CreateBucket(ctx, &s3.CreateBucketInput{
+                Bucket: aws.String(s.bucketName),
+            })
+            if err != nil {
+                return fmt.Errorf("failed to create bucket %s: %w", s.bucketName, err)
+            }
+            
+            fmt.Printf("Waiting for bucket %s to be ready...\n", s.bucketName)
+            time.Sleep(3 * time.Second)
+            
+            _, err = s.client.HeadBucket(ctx, &s3.HeadBucketInput{
+                Bucket: aws.String(s.bucketName),
+            })
+            if err != nil {
+                return fmt.Errorf("bucket created but verification failed: %w", err)
+            }
+            
+            fmt.Printf("Bucket %s created successfully\n", s.bucketName)
+            return nil
+        }
+        
+        return fmt.Errorf("error checking bucket existence: %w", err)
+    }
+
+    fmt.Printf("Bucket %s already exists\n", s.bucketName)
+    return nil
 }
 
 func (s *S3Storage) DeleteFile(path []string) error {
